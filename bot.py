@@ -43,33 +43,35 @@ TRENDING_HASHTAGS = data["TRENDING_HASHTAGS"]
 COUNTRIES = list(BEST_POSTING_HOURS.keys())
 
 # --------------------
+# نص المساعدة
+# --------------------
+HELP_TEXT = (
+    "👋 مرحبًا بك في بوت تحليل TikTok!\n\n"
+    "📌 **كيفية استخدام البوت:**\n"
+    "1️⃣ أرسل اسم الحساب:\n"
+    "`/analyze USERNAME`\n"
+    "2️⃣ اختر الدولة من الأزرار.\n"
+    "3️⃣ سيعرض لك البوت التحليل كامل.\n\n"
+    "⚠️ لديك 3 محاولات مجانية.\nVIP: استخدام غير محدود.\n\n"
+    "💡 للاستفسار أو الاشتراك:\n"
+    "@YOUR_USERNAME"
+)
+
+# --------------------
 # دوال البوت
 # --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    buttons = [[InlineKeyboardButton("ℹ️ مساعدة", callback_data="HELP")]]
+    markup = InlineKeyboardMarkup(buttons)
     text = (
         "👋 مرحبًا بك في بوت تحليل TikTok!\n\n"
         "✅ لديك 3 محاولات مجانية.\n"
         "💡 لتحليل حساب استخدم:\n"
         "`/analyze USERNAME`\n"
         "ثم اختر الدولة من الأزرار.\n\n"
-        "📌 لمعرفة جميع التعليمات استخدم:\n"
-        "`/help`"
+        "📌 اضغط على زر المساعدة إذا أردت تعليمات مفصلة."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "👋 مرحبًا بك في بوت تحليل TikTok!\n\n"
-        "📌 **كيفية استخدام البوت:**\n"
-        "1️⃣ أرسل اسم الحساب:\n"
-        "`/analyze USERNAME`\n"
-        "2️⃣ اختر الدولة من الأزرار.\n"
-        "3️⃣ سيعرض لك البوت التحليل كامل.\n\n"
-        "⚠️ لديك 3 محاولات مجانية.\nVIP: استخدام غير محدود.\n\n"
-        "💡 للاستفسار أو الاشتراك:\n"
-        "@YOUR_USERNAME"
-    )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
 
 async def analyze_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = ' '.join(context.args).replace("@", "")
@@ -83,6 +85,12 @@ async def analyze_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if query.data == "HELP":
+        await query.message.reply_text(HELP_TEXT, parse_mode="Markdown")
+        return
+
+    # ------------------ تحليل الحساب ------------------
     username, country = query.data.split("|")
     user_id = str(query.from_user.id)
 
@@ -150,17 +158,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     print(f"❌ حدث خطأ: {context.error}")
 
 # --------------------
-# تشغيل البوت باستخدام Polling
+# تشغيل البوت
 # --------------------
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("analyze", analyze_start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_error_handler(error_handler)
 
-    print("✅ BOT RUNNING... باستخدام Polling")
+    print("✅ BOT RUNNING... باستخدام Polling مع زر مساعدة")
     app.run_polling()
 
 if __name__ == "__main__":
