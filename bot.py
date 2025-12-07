@@ -2,14 +2,19 @@ import os
 import json
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
 # --------------------
 # إعداد البوت
 # --------------------
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 if not TOKEN:
-    raise RuntimeError("❌ BOT TOKEN not found")
+    raise RuntimeError("❌ BOT_TOKEN غير محدد في Environment")
 
 FREE_LIMIT = 3
 USERS_FILE = "users.json"
@@ -38,7 +43,7 @@ TRENDING_HASHTAGS = data["TRENDING_HASHTAGS"]
 COUNTRIES = list(BEST_POSTING_HOURS.keys())
 
 # --------------------
-# دالة /start
+# دوال البوت
 # --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -52,48 +57,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
-# --------------------
-# دالة /help
-# --------------------
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "👋 مرحبًا بك في بوت تحليل TikTok!\n\n"
         "📌 **كيفية استخدام البوت:**\n"
-        "1️⃣ أرسل اسم الحساب الذي تريد تحليله:\n"
+        "1️⃣ أرسل اسم الحساب:\n"
         "`/analyze USERNAME`\n"
-        "مثال:\n"
-        "`/analyze koki67110`\n\n"
-        "2️⃣ بعد ذلك ستظهر لك قائمة بالدول المتاحة، اختر الدولة.\n\n"
-        "3️⃣ بعد اختيار الدولة، سيعرض البوت:\n"
-        "   - عدد المتابعين\n"
-        "   - عدد الفيديوهات\n"
-        "   - عدد الإعجابات\n"
-        "   - معدل التفاعل\n"
-        "   - أفضل أوقات النشر حسب الدولة\n"
-        "   - هاشتاغات مقترحة\n\n"
-        "⚠️ لديك 3 محاولات مجانية، بعدها الاشتراك مطلوب.\n"
-        "VIP: استخدام غير محدود.\n\n"
+        "2️⃣ اختر الدولة من الأزرار.\n"
+        "3️⃣ سيعرض لك البوت التحليل كامل.\n\n"
+        "⚠️ لديك 3 محاولات مجانية.\nVIP: استخدام غير محدود.\n\n"
         "💡 للاستفسار أو الاشتراك:\n"
         "@YOUR_USERNAME"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# --------------------
-# دالة /analyze البداية
-# --------------------
 async def analyze_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    username = ' '.join(context.args).replace("@","")
+    username = ' '.join(context.args).replace("@", "")
     if not username:
         await update.message.reply_text("❗ استخدم:\n/analyze USERNAME")
         return
-
-    buttons = [[InlineKeyboardButton(country, callback_data=f"{username}|{country}")] for country in COUNTRIES]
+    buttons = [[InlineKeyboardButton(c, callback_data=f"{username}|{c}")] for c in COUNTRIES]
     reply_markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text("اختر الدولة:", reply_markup=reply_markup)
 
-# --------------------
-# التعامل مع اختيار الدولة
-# --------------------
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -106,8 +92,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in VIP_USERS and use_count >= FREE_LIMIT:
         await query.edit_message_text(
             "🚫 انتهت محاولاتك المجانية.\n"
-            "✅ للاشتراك واستخدام البوت بدون حدود تواصل معنا:\n"
-            "@YOUR_USERNAME\n💰 سعر الاشتراك: ضع السعر هنا"
+            "✅ للاشتراك واستخدام البوت بدون حدود:\n"
+            "@YOUR_USERNAME"
         )
         return
 
@@ -134,15 +120,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         videos = extract('"videoCount":')
         engagement = round((int(likes)/int(followers))*100,2) if int(followers)>0 else 0
 
-        # زيادة العداد بعد النجاح
         if user_id not in VIP_USERS:
             users[user_id] = use_count + 1
             save_users(users)
             remaining = FREE_LIMIT - users[user_id]
-            await query.edit_message_text(
-                f"⚠️ هذه محاولتك رقم {users[user_id]} من {FREE_LIMIT} محاولات مجانية.\n"
-                f"المتبقي لك: {remaining} محاولات."
-            )
         else:
             remaining = "∞ (VIP)"
 
@@ -155,7 +136,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔥 معدل التفاعل: {engagement}%\n\n"
             f"💡 أفضل أوقات النشر في {country}: {', '.join(BEST_POSTING_HOURS[country])}\n"
             f"💡 هاشتاغات مقترحة: {', '.join(TRENDING_HASHTAGS[country])}\n\n"
-            f"🎁 المحاولات المجانية المتبقية: {remaining}"
+            f"🎁 المحاولات المتبقية: {remaining}"
         )
         await query.message.reply_text(msg)
 
@@ -163,7 +144,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"❌ حدث خطأ أثناء التحليل: {e}")
 
 # --------------------
-# تشغيل البوت
+# Error Handler
+# --------------------
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print(f"❌ حدث خطأ: {context.error}")
+
+# --------------------
+# تشغيل البوت باستخدام Polling
 # --------------------
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -171,7 +158,9 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("analyze", analyze_start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    print("✅ BOT RUNNING...")
+    app.add_error_handler(error_handler)
+
+    print("✅ BOT RUNNING... باستخدام Polling")
     app.run_polling()
 
 if __name__ == "__main__":
