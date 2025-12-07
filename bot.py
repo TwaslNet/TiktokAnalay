@@ -1,24 +1,30 @@
 import os
 import json
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
+from flask import Flask, request
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, ContextTypes
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # --------------------
-# إعداد البوت
+# إعداد Flask والبوت
 # --------------------
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN غير محدد في Environment")
 
+APP_URL = os.environ.get("APP_URL")  # رابط تطبيقك على Render
+if not APP_URL:
+    raise RuntimeError("❌ APP_URL غير محدد في Environment")
+
 FREE_LIMIT = 3
 USERS_FILE = "users.json"
 VIP_USERS = ["123456789"]  # ضع User ID للمشتركين الدائمين
+
+bot = Bot(TOKEN)
+app = Flask(__name__)
+dp = Dispatcher(bot, None, workers=0)
 
 # --------------------
 # تحميل بيانات المستخدمين
@@ -34,10 +40,11 @@ def save_users(users):
         json.dump(users, f)
 
 # --------------------
-# تحميل أوقات النشر والهاشتاغات من ملف خارجي
+# تحميل أوقات النشر والهاشتاغات
 # --------------------
 with open("posting_data.json", "r", encoding="utf-8") as f:
     data = json.load(f)
+
 BEST_POSTING_HOURS = data["BEST_POSTING_HOURS"]
 TRENDING_HASHTAGS = data["TRENDING_HASHTAGS"]
 COUNTRIES = list(BEST_POSTING_HOURS.keys())
@@ -51,8 +58,15 @@ HELP_TEXT = (
     "1️⃣ أرسل اسم الحساب:\n"
     "`/analyze USERNAME`\n"
     "2️⃣ اختر الدولة من الأزرار.\n"
-    "3️⃣ سيعرض لك البوت التحليل كامل.\n\n"
-    "⚠️ لديك 3 محاولات مجانية.\nVIP: استخدام غير محدود.\n\n"
+    "3️⃣ بعد الاختيار، سيظهر لك:\n"
+    "   - عدد المتابعين\n"
+    "   - عدد الفيديوهات\n"
+    "   - عدد الإعجابات\n"
+    "   - معدل التفاعل\n"
+    "   - أفضل أوقات النشر حسب الدولة\n"
+    "   - هاشتاغات مقترحة\n\n"
+    "⚠️ لديك 3 محاولات مجانية، بعدها الاشتراك مطلوب.\n"
+    "VIP: استخدام غير محدود.\n\n"
     "💡 للاستفسار أو الاشتراك:\n"
     "@YOUR_USERNAME"
 )
@@ -65,13 +79,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(buttons)
     text = (
         "👋 مرحبًا بك في بوت تحليل TikTok!\n\n"
-        "✅ لديك 3 محاولات مجانية.\n"
+        f"✅ لديك {FREE_LIMIT} محاولات مجانية.\n"
         "💡 لتحليل حساب استخدم:\n"
         "`/analyze USERNAME`\n"
         "ثم اختر الدولة من الأزرار.\n\n"
         "📌 اضغط على زر المساعدة إذا أردت تعليمات مفصلة."
     )
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(HELP_TEXT, parse_mode="Markdown")
 
 async def analyze_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = ' '.join(context.args).replace("@", "")
@@ -90,7 +107,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(HELP_TEXT, parse_mode="Markdown")
         return
 
-    # ------------------ تحليل الحساب ------------------
     username, country = query.data.split("|")
     user_id = str(query.from_user.id)
 
@@ -128,6 +144,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         videos = extract('"videoCount":')
         engagement = round((int(likes)/int(followers))*100,2) if int(followers)>0 else 0
 
+        # زيادة العداد بعد نجاح التحليل
         if user_id not in VIP_USERS:
             users[user_id] = use_count + 1
             save_users(users)
@@ -152,23 +169,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"❌ حدث خطأ أثناء التحليل: {e}")
 
 # --------------------
-# Error Handler
+# تسجيل الأوامر
 # --------------------
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    print(f"❌ حدث خطأ: {context.error}")
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("help", help_command))
+dp.add_handler(CommandHandler("analyze", analyze_start))
+dp.add_handler(CallbackQueryHandler(button_handler))
 
 # --------------------
-# تشغيل البوت
+# Webhook Route
 # --------------------
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("analyze", analyze_start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_error_handler(error_handler)
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dp.run_update(update)
+    return "OK"
 
-    print("✅ BOT RUNNING... باستخدام Polling مع زر مساعدة")
-    app.run_polling()
-
+# --------------------
+# تشغيل السيرفر
+# --------------------
 if __name__ == "__main__":
-    main()
+    bot.set_webhook(f"{APP_URL}/{TOKEN}")
+    print("✅ Webhook مفعل، البوت يعمل على Render")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
