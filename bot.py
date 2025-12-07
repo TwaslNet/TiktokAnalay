@@ -1,5 +1,8 @@
 import os
 import requests
+import json
+import pandas as pd
+import matplotlib.pyplot as plt
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -15,6 +18,15 @@ BEST_POSTING_HOURS = {
     "Saudi Arabia": ["10:00 - 12:00", "20:00 - 22:00"],
     "USA": ["12:00 - 14:00", "19:00 - 21:00"],
     "UK": ["11:00 - 13:00", "18:00 - 20:00"]
+}
+
+# اقتراح هاشتاغات trending لكل دولة
+TRENDING_HASHTAGS = {
+    "Yemen": ["#foryou", "#yemen", "#viral", "#trending"],
+    "Egypt": ["#foryou", "#egypt", "#trending", "#viral"],
+    "Saudi Arabia": ["#foryou", "#saudi", "#trending", "#viral"],
+    "USA": ["#foryou", "#usa", "#trending", "#viral"],
+    "UK": ["#foryou", "#uk", "#trending", "#viral"]
 }
 
 # --- دالة بدء البوت
@@ -42,7 +54,7 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         txt = r.text
 
-        # استخراج البيانات من JSON داخل صفحة TikTok
+        # استخراج البيانات الأساسية من JSON داخل الصفحة
         def extract(key):
             idx = txt.find(key)
             if idx == -1:
@@ -58,22 +70,49 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         engagement = round((int(likes)/int(followers))*100,2) if int(followers)!=0 else 0
 
-        # اقتراح أوقات النشر حسب الدولة
-        best_hours = BEST_POSTING_HOURS.get(country, ["غير معروف"])
+        # --- أفضل 3 فيديوهات
+        video_list = []
+        try:
+            data_json = json.loads(txt.split('{"props"')[1].split("</script>")[0].split("</script>")[0]+"}")
+            item_module = data_json.get("ItemModule", {})
+            for vid in item_module.values():
+                video_list.append({
+                    "title": vid.get("desc", ""),
+                    "views": vid.get("stats", {}).get("playCount", 0)
+                })
+        except:
+            pass
+
+        top_videos = sorted(video_list, key=lambda x: x["views"], reverse=True)[:3]
 
         # رسالة التقرير
-        msg = f"""
-📊 تحليل حساب تيك توك @{username}
+        msg = f"📊 تحليل حساب تيك توك @{username}\n\n"
+        msg += f"👥 المتابعون: {followers}\n"
+        msg += f"🔁 يتابع: {following}\n"
+        msg += f"🎬 عدد الفيديوهات: {videos}\n"
+        msg += f"❤️ الإعجابات: {likes}\n"
+        msg += f"🔥 معدل التفاعل: {engagement}%\n\n"
+        msg += f"💡 أفضل أوقات النشر في {country}: {', '.join(BEST_POSTING_HOURS.get(country, ['غير معروف']))}\n"
+        msg += f"💡 هاشتاغات مقترحة: {', '.join(TRENDING_HASHTAGS.get(country, ['#foryou']))}\n\n"
 
-👥 المتابعون: {followers}
-🔁 يتابع: {following}
-🎬 عدد الفيديوهات: {videos}
-❤️ الإعجابات: {likes}
-🔥 معدل التفاعل: {engagement}%
+        if top_videos:
+            msg += "📌 أفضل 3 فيديوهات حسب المشاهدات:\n"
+            for vid in top_videos:
+                msg += f"- {vid['title'][:30]}... | المشاهدات: {vid['views']}\n"
 
-💡 أفضل أوقات النشر في {country}: {', '.join(best_hours)}
-"""
         await update.message.reply_text(msg)
+
+        # رسم بياني لأعلى 3 فيديوهات
+        if top_videos:
+            plt.figure(figsize=(6,4))
+            plt.bar([v["title"][:10] for v in top_videos], [v["views"] for v in top_videos])
+            plt.title("أفضل 3 فيديوهات حسب المشاهدات")
+            plt.ylabel("عدد المشاهدات")
+            plt.xticks(rotation=15)
+            plt.tight_layout()
+            plt.savefig("top_videos.png")
+            plt.close()
+            await update.message.reply_photo(photo=open("top_videos.png", "rb"))
 
     except Exception as e:
         await update.message.reply_text(f"❌ فشل التحليل: {e}")
@@ -83,7 +122,6 @@ def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("analyze", analyze))
-
     print("✅ BOT RUNNING...")
     app.run_polling()
 
