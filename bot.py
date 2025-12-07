@@ -1,73 +1,114 @@
 import os
+import json
 import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# قراءة توكن البوت من Environment Variables
+# --------------------
+# إعداد البوت
+# --------------------
 TOKEN = os.environ.get("TG_BOT_TOKEN")
 if not TOKEN:
-    raise RuntimeError("❌ BOT TOKEN not found in environment variables")
+    raise RuntimeError("❌ BOT TOKEN not found")
 
-# قاعدة بيانات لأفضل أوقات النشر حسب الدولة
-BEST_POSTING_HOURS = {
-    "Yemen": ["10:00 - 12:00", "19:00 - 21:00"],
-    "Egypt": ["09:00 - 11:00", "18:00 - 20:00"],
-    "Saudi Arabia": ["10:00 - 12:00", "20:00 - 22:00"],
-    "USA": ["12:00 - 14:00", "19:00 - 21:00"],
-    "UK": ["11:00 - 13:00", "18:00 - 20:00"]
-}
+FREE_LIMIT = 3
+USERS_FILE = "users.json"
+VIP_USERS = ["123456789"]  # ضع User ID للمشتركين الدائمين
 
-# اقتراح هاشتاغات trending لكل دولة
-TRENDING_HASHTAGS = {
-    "Yemen": ["#foryou", "#yemen", "#viral", "#trending"],
-    "Egypt": ["#foryou", "#egypt", "#trending", "#viral"],
-    "Saudi Arabia": ["#foryou", "#saudi", "#trending", "#viral"],
-    "USA": ["#foryou", "#usa", "#trending", "#viral"],
-    "UK": ["#foryou", "#uk", "#trending", "#viral"]
-}
+# --------------------
+# تحميل بيانات المستخدمين
+# --------------------
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r") as f:
+        return json.load(f)
 
-# --- دالة بدء البوت
+def save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f)
+
+# --------------------
+# تحميل أوقات النشر والهاشتاغات من ملف خارجي
+# --------------------
+with open("posting_data.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+BEST_POSTING_HOURS = data["BEST_POSTING_HOURS"]
+TRENDING_HASHTAGS = data["TRENDING_HASHTAGS"]
+
+# --------------------
+# بدء البوت
+# --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 مرحبًا!\n\n"
+        "👋 مرحبًا!\n"
+        "لديك 3 تحليلات مجانية ✅\n"
         "استخدم الأمر:\n/analyze USERNAME COUNTRY\n"
         "مثال:\n/analyze koki67110 Yemen"
     )
 
-# --- دالة تحليل الحساب
+# --------------------
+# تحليل الحساب
+# --------------------
 async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    users = load_users()
+    use_count = users.get(user_id, 0)
+
+    # التحقق من الحد المجاني أو VIP
+    if user_id not in VIP_USERS and use_count >= FREE_LIMIT:
+        await update.message.reply_text(
+            "🚫 لقد انتهت محاولاتك المجانية.\n"
+            "✅ للاشتراك واستخدام البوت بدون حدود تواصل معنا:\n"
+            "@YOUR_USERNAME\n"
+            "💰 سعر الاشتراك: ضع السعر هنا"
+        )
+        return
+
+    # زيادة العداد للمستخدمين غير VIP
+    if user_id not in VIP_USERS:
+        users[user_id] = use_count + 1
+        save_users(users)
+        remaining = FREE_LIMIT - users[user_id]
+        # رسالة تنبيه للمستخدم بالمحاولات المتبقية
+        await update.message.reply_text(
+            f"⚠️ تنبيه: هذه محاولتك رقم {users[user_id]} من {FREE_LIMIT} محاولات مجانية.\n"
+            f"المتبقي لك: {remaining} محاولات."
+        )
+    else:
+        remaining = "∞ (VIP)"
+
+    # التحقق من المدخلات
     if len(context.args) < 2:
         await update.message.reply_text("❗ استخدم:\n/analyze USERNAME COUNTRY")
         return
 
-    username = context.args[0].replace("@", "")
-    country = context.args[1].title()  # نجعل أول حرف كبير لتوحيد المدخلات
+    username = context.args[0].replace("@","")
+    country = context.args[1].title()
 
-    # التحقق من الدولة
     if country not in BEST_POSTING_HOURS:
-        countries_list = ", ".join(BEST_POSTING_HOURS.keys())
         await update.message.reply_text(
-            f"❌ الدولة '{country}' غير موجودة في قاعدة البيانات.\n"
-            f"الرجاء اختيار إحدى الدول التالية: {countries_list}"
+            f"❌ الدولة غير مدعومة.\n"
+            f"الدول المتاحة:\n{', '.join(BEST_POSTING_HOURS.keys())}"
         )
         return
 
+    # جلب البيانات من TikTok
     url = f"https://www.tiktok.com/@{username}"
     headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
         r = requests.get(url, headers=headers, timeout=10)
         if r.status_code != 200:
-            raise Exception("الحساب غير موجود أو محمي")
+            raise Exception("الحساب غير موجود")
 
         txt = r.text
 
-        # استخراج البيانات الأساسية من JSON داخل الصفحة
         def extract(key):
-            idx = txt.find(key)
-            if idx == -1:
+            i = txt.find(key)
+            if i == -1:
                 return "0"
-            start = idx + len(key)
+            start = i + len(key)
             end = txt.find(",", start)
             return txt[start:end]
 
@@ -75,26 +116,30 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         following = extract('"followingCount":')
         likes = extract('"heartCount":')
         videos = extract('"videoCount":')
+        engagement = round((int(likes)/int(followers))*100,2) if int(followers)>0 else 0
 
-        # معدل التفاعل
-        engagement = round((int(likes)/int(followers))*100, 2) if int(followers) != 0 else 0
-
-        # رسالة التقرير
-        msg = f"📊 تحليل حساب تيك توك @{username}\n\n"
-        msg += f"👥 المتابعون: {followers}\n"
-        msg += f"🔁 يتابع: {following}\n"
-        msg += f"🎬 عدد الفيديوهات: {videos}\n"
-        msg += f"❤️ الإعجابات: {likes}\n"
-        msg += f"🔥 معدل التفاعل: {engagement}%\n\n"
-        msg += f"💡 أفضل أوقات النشر في {country}: {', '.join(BEST_POSTING_HOURS[country])}\n"
-        msg += f"💡 هاشتاغات مقترحة: {', '.join(TRENDING_HASHTAGS[country])}"
+        msg = (
+            f"📊 تحليل حساب @{username}\n\n"
+            f"👥 المتابعون: {followers}\n"
+            f"🔁 يتابع: {following}\n"
+            f"🎬 عدد الفيديوهات: {videos}\n"
+            f"❤️ الإعجابات: {likes}\n"
+            f"🔥 معدل التفاعل: {engagement}%\n\n"
+            f"💡 أفضل أوقات النشر في {country}: "
+            f"{', '.join(BEST_POSTING_HOURS[country])}\n"
+            f"💡 هاشتاغات مقترحة: "
+            f"{', '.join(TRENDING_HASHTAGS[country])}\n\n"
+            f"🎁 المحاولات المجانية المتبقية: {remaining}"
+        )
 
         await update.message.reply_text(msg)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ فشل التحليل: {e}")
+        await update.message.reply_text(f"❌ حدث خطأ أثناء التحليل: {e}")
 
-# --- تشغيل البوت
+# --------------------
+# تشغيل البوت
+# --------------------
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
