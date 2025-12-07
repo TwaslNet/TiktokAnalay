@@ -1,37 +1,16 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <BEST_POSTING_HOURS>
-    <Yemen>10:00 - 12:00</Yemen>
-    <Yemen>19:00 - 21:00</Yemen>
-    <Egypt>09:00 - 11:00</Egypt>
-    <Egypt>18:00 - 20:00</Egypt>
-    <Saudi__EA__Arabia>10:00 - 12:00</Saudi__EA__Arabia>
-    <Saudi__EA__Arabia>20:00 - 22:00</Saudi__EA__Arabia>
-    <USA>12:00 - 14:00</USA>
-    <USA>19:00 - 21:00</USA>
-    <UK>11:00 - 13:00</UK>
-    <UK>18:00 - 20:00</UK>
-  </BEST_POSTING_HOURS>
-  <TRENDING_HASHTAGS>
-    <Yemen>#foryou</Yemen>
-    <Yemen>#yemen</Yemen>
-    <Yemen>#viral</Yemen>
-    <Yemen>#trending</Yemen>
-    <Egypt>#foryou</Egypt>
-    <Egypt>#egypt</Egypt>
-    <Egypt>#viral</Egypt>
-    <Egypt>#trending</Egypt>
-    <Saudi__EA__Arabia>#foryou</Saudi__EA__Arabia>
-    <Saudi__EA__Arabia>#saudi</Saudi__EA__Arabia>
-    <Saudi__EA__Arabia>#viral</Saudi__EA__Arabia>
-    <Saudi__EA__Arabia>#trending</Saudi__EA__Arabia>
-    <USA>#foryou</USA>
-    <USA>#usa</USA>
-    <USA>#viral</USA>
-    <USA>#trending</USA>
-    <UK>#foryou</UK>
-    <UK>#uk</UK>
-    <UK>#viral</UK>
-    <UK>#trending</UK>
-  </TRENDING_HASHTAGS>
-</root>
+{
+  "BEST_POSTING_HOURS": {
+    "Yemen": ["10:00 - 12:00", "19:00 - 21:00"],
+    "Egypt": ["09:00 - 11:00", "18:00 - 20:00"],
+    "Saudi Arabia": ["10:00 - 12:00", "20:00 - 22:00"],
+    "USA": ["12:00 - 14:00", "19:00 - 21:00"],
+    "UK": ["11:00 - 13:00", "18:00 - 20:00"]
+  },
+  "TRENDING_HASHTAGS": {
+    "Yemen": ["#foryou", "#yemen", "#viral", "#trending"],
+    "Egypt": ["#foryou", "#egypt", "#viral", "#trending"],
+    "Saudi Arabia": ["#foryou", "#saudi", "#viral", "#trending"],
+    "USA": ["#foryou", "#usa", "#viral", "#trending"],
+    "UK": ["#foryou", "#uk", "#viral", "#trending"]
+  }
+}
